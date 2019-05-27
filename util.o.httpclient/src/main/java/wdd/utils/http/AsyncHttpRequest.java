@@ -2,6 +2,7 @@ package wdd.utils.http;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpVersion;
@@ -25,7 +26,6 @@ import org.apache.http.params.HttpProtocolParams;
 import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import wdd.utils.commons.StringUtils;
 import wdd.utils.http.exception.HttpException;
 
 import java.io.IOException;
@@ -99,8 +99,9 @@ public class AsyncHttpRequest {
      */
     public Future<HttpResponse> post(String url, final Map<String, String> params) {
         return post(url, new ArrayList<NameValuePair>() {{
-            for (Map.Entry<String, String> entry : params.entrySet())
+            for (Map.Entry<String, String> entry : params.entrySet()) {
                 add(new BasicNameValuePair(entry.getKey(), entry.getValue()));
+            }
 
         }});
     }
@@ -109,7 +110,9 @@ public class AsyncHttpRequest {
         String result = "";
         HttpPost request = postRequest(url);
         try {
-            if (request == null) throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            if (request == null) {
+                throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            }
 
             request.setEntity(new UrlEncodedFormEntity(params, "utf-8"));
 
@@ -130,7 +133,9 @@ public class AsyncHttpRequest {
         String result = "";
         HttpPost request = postRequest(url);
         try {
-            if (request == null) throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            if (request == null) {
+                throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            }
 
             request.setHeader("Content-Type", "application/json;charset=utf-8");
             request.setHeader("Accept", "application/json;charset=utf-8");
@@ -146,7 +151,7 @@ public class AsyncHttpRequest {
         HttpResponse response = f_response.get();
         if (response != null) {
             HttpEntity entity = response.getEntity();
-            if (response.getStatusLine() != null)
+            if (response.getStatusLine() != null) {
                 if (response.getStatusLine().getStatusCode() == 200 && entity != null) {
                     result = EntityUtils.toString(entity, encode);
                     EntityUtils.consume(entity);
@@ -155,6 +160,7 @@ public class AsyncHttpRequest {
                     EntityUtils.consume(entity);
                     throw new HttpException(response.getStatusLine());
                 }
+            }
         }
         return result;
     }
@@ -168,12 +174,13 @@ public class AsyncHttpRequest {
         HttpResponse response = f_response.get();
         if (response != null) {
             HttpEntity entity = response.getEntity();
-            if (response.getStatusLine() != null)
+            if (response.getStatusLine() != null) {
                 if (response.getStatusLine().getStatusCode() == 200 && entity != null) {
                     result = EntityUtils.toByteArray(entity);
                 } else {
                     logger.error(String.valueOf(response.getStatusLine().getStatusCode()));
                 }
+            }
             EntityUtils.consume(entity);
         }
         return result;
@@ -195,7 +202,9 @@ public class AsyncHttpRequest {
         HttpPost request = postRequest(url);
 
         try {
-            if (request == null) throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            if (request == null) {
+                throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            }
 
             request.setHeader("Content-Type", "application/json;charset=utf-8");
             request.setHeader("Accept", "application/json;charset=utf-8");
@@ -211,13 +220,16 @@ public class AsyncHttpRequest {
         String result = "";
         HttpPost request = postRequest(url);
         try {
-            if (request == null) throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            if (request == null) {
+                throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            }
             request.setHeader("Content-Type", "application/x-www-form-urlencoded");
             request.setHeader("Accept", "application/json;charset=utf-8");
             StringBuilder data = new StringBuilder();
             for (Map.Entry<String, String> entry : json.entrySet()) {
-                if (!data.toString().equals(""))
+                if (!data.toString().equals("")) {
                     data.append("&");
+                }
                 data.append(entry.getKey()).append('=').append(entry.getValue());
             }
             request.setEntity(new StringEntity(data.toString(), "utf-8"));
@@ -238,7 +250,9 @@ public class AsyncHttpRequest {
         Future<HttpResponse> result = null;
         try {
             HttpPost request = postRequest(url);
-            if (request == null) throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            if (request == null) {
+                throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            }
 
             request.setHeader("Content-Type", "application/x-protobuf");
             request.setEntity(new ByteArrayEntity(data));
@@ -255,7 +269,9 @@ public class AsyncHttpRequest {
         Future<HttpResponse> result = null;
         try {
             HttpPost request = postRequest(url);
-            if (request == null) throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            if (request == null) {
+                throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            }
 
             request.setHeader("token", token);
             request.setHeader("Content-Type", "application/x-protobuf");
@@ -275,7 +291,9 @@ public class AsyncHttpRequest {
         String result = "";
         HttpGet request = getRequest(url, headers);
         try {
-            if (request == null) throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            if (request == null) {
+                throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            }
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -286,7 +304,7 @@ public class AsyncHttpRequest {
     protected HttpPost postRequest(String url) {
         HttpPost request = null;
         try {
-            if (StringUtils.nonEmpty(url)) {
+            if (StringUtils.isNotBlank(url)) {
                 request = new HttpPost(url);
                 request.setHeader("Connection", "Keep-Alive");
             }
@@ -299,7 +317,7 @@ public class AsyncHttpRequest {
     protected HttpGet getRequest(String url, Map<String, String> headers) {
         HttpGet request = null;
         try {
-            if (StringUtils.nonEmpty(url)) {
+            if (StringUtils.isNotBlank(url)) {
                 request = new HttpGet(url);
                 request.setHeader("Connection", "Keep-Alive");
                 if (headers != null && headers.size() > 0) {
@@ -326,8 +344,9 @@ public class AsyncHttpRequest {
 
     public void wait_close() {
         try {
-            if (latch != null)
+            if (latch != null) {
                 latch.wait(latch.getCount() * 10000);
+            }
             client.shutdown();
         } catch (InterruptedException e) {
             e.printStackTrace();

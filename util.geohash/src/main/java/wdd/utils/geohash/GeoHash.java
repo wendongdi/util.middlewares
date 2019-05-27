@@ -2,6 +2,7 @@ package wdd.utils.geohash;
 
 import ch.hsr.geohash.BoundingBox;
 import ch.hsr.geohash.WGS84Point;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.CompareFilter;
@@ -9,7 +10,7 @@ import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.RowFilter;
 import org.apache.hadoop.hbase.filter.SubstringComparator;
 import org.junit.Assert;
-import wdd.utils.commons.AppConfig;
+import wdd.utils.commons.Md5Code;
 import wdd.utils.commons.ShortCut;
 import wdd.utils.commons.StringUtils;
 import wdd.utils.hbase.HBaseClient;
@@ -150,12 +151,15 @@ public class GeoHash {
         List<Result> rows = new ArrayList<>();
         for (Result result : HBaseClient.instance().scan(table_device_geo, scan)) {
             rows.add(result);
+            if (scan.getCaching() > 0 && rows.size() >= scan.getCaching()) {
+                break;
+            }
         }
         return rows;
     }
 
     private static byte[] famInfo = "info".getBytes();
-    private static byte[] qualCount = "count".getBytes();
+//    private static byte[] qualCount = "count".getBytes();
 
     public static List<GeoData> hashAreaSearch(List<Scan> scans) throws HBaseRunTimeException, HBaseConnectionException {
         List<GeoData> datas = new ArrayList<>();
@@ -163,10 +167,16 @@ public class GeoHash {
             for (Result hashAreaRow : geoScanRows(scan)) {
                 String row = new String(hashAreaRow.getRow());
                 String[] geoStatDid = row.split("_");
-                String countStr = new String(hashAreaRow.getColumnLatestCell(famInfo, qualCount).getValue());
-                if (countStr.matches("\\d+")) {
+                int count = 0;
+                for (Cell cell : hashAreaRow.listCells()) {
+                    String countStr = new String(cell.getValue());
+                    if (countStr.matches("\\d+")) {
+                        count += Integer.valueOf(new String(cell.getValue()));
+                    }
+                }
+                if (count > 0) {
                     if (geoStatDid.length == 3) {
-                        datas.add(new GeoData(geoStatDid[0], geoStatDid[1], geoStatDid[2], Integer.valueOf(countStr)));
+                        datas.add(new GeoData(geoStatDid[0], geoStatDid[1], geoStatDid[2], count));
                     }
                 }
             }
@@ -180,10 +190,16 @@ public class GeoHash {
         for (Result hashAreaRow : deviceScanRows(scan)) {
             String row = new String(hashAreaRow.getRow());
             String[] didStatGeo = row.split("_");
-            String countStr = new String(hashAreaRow.getColumnLatestCell(famInfo, qualCount).getValue());
-            if (countStr.matches("\\d+")) {
+            int count = 0;
+            for (Cell cell : hashAreaRow.listCells()) {
+                String countStr = new String(cell.getValue());
+                if (countStr.matches("\\d+")) {
+                    count += Integer.valueOf(new String(cell.getValue()));
+                }
+            }
+            if (count > 0) {
                 if (didStatGeo.length == 3) {
-                    datas.add(new GeoData(didStatGeo[2], didStatGeo[1], new StringBuilder(didStatGeo[0]).reverse().toString(), Integer.valueOf(countStr)));
+                    datas.add(new GeoData(didStatGeo[2], didStatGeo[1], new StringBuilder(didStatGeo[0]).reverse().toString(), count));
                 }
             }
         }
@@ -335,9 +351,9 @@ public class GeoHash {
      * @throws HBaseRunTimeException
      * @throws HBaseConnectionException
      */
-    public static List<WGS84Point> trace(String did, String startDate, String endDate) throws HBaseRunTimeException, HBaseConnectionException {
+    public static List<WGS84Point> trace(String did, String startDate, String endDate, Integer limit) throws HBaseRunTimeException, HBaseConnectionException {
         Set<String> hashSet = new HashSet<>();
-        for (Map<String, Integer> hashs : did2statHash(did, startDate, endDate).values()) {
+        for (Map<String, Integer> hashs : did2statHash(did, startDate, endDate, limit).values()) {
             hashSet.addAll(hashs.keySet());
         }
         List<WGS84Point> ress = new ArrayList<>();
@@ -360,7 +376,7 @@ public class GeoHash {
      */
     public static Map<WGS84Point, Integer> traceRough(String did, String startDate, String endDate, Integer limit) throws HBaseRunTimeException, HBaseConnectionException {
         Map<String, Integer> hashMap = new HashMap<>();
-        for (Map<String, Integer> hashs : did2statHash(did, startDate, endDate).values()) {
+        for (Map<String, Integer> hashs : did2statHash(did, startDate, endDate, -1).values()) {
             for (String hash : hashs.keySet()) {
                 String roughKey = hash.substring(0, 5);
                 if (hashMap.containsKey(roughKey)) {
@@ -400,9 +416,13 @@ public class GeoHash {
      * @throws HBaseRunTimeException    hbase运行时错误
      * @throws HBaseConnectionException hbase连接错误
      */
-    public static Map<String, Map<String, Integer>> did2statHash(String did, String startDate, String endDate) throws HBaseRunTimeException, HBaseConnectionException {
+    public static Map<String, Map<String, Integer>> did2statHash(String did, String startDate, String endDate, Integer limit) throws HBaseRunTimeException, HBaseConnectionException {
         Map<String, Map<String, Integer>> ress = new HashMap<>();
-        String ddid = new StringBuilder(ShortCut.didStandard(did, "").replace(":", "").toUpperCase()).reverse().toString();
+        String rdid = ShortCut.didStandard(did, "").replace(":", "").toUpperCase();
+        if (rdid.length() == 36) {
+            rdid = Md5Code.getMd5(rdid).toUpperCase();
+        }
+        String ddid = new StringBuilder(rdid).reverse().toString();
         String startrow = ddid;
         String endrow = ddid;
         if (StringUtils.nonEmpty(startDate)) {
@@ -417,6 +437,9 @@ public class GeoHash {
         startrow += "_";
         endrow += "~";
         Scan scan = new Scan(startrow.getBytes(), endrow.getBytes());
+        if (limit > 0) {
+            scan.setCaching(limit);
+        }
 
         for (GeoData geoData : didHashSearch(scan)) {
             if (!ress.containsKey(geoData.statdate)) {
@@ -433,32 +456,6 @@ public class GeoHash {
 
 
     public static void main(String[] args) throws HBaseRunTimeException, HBaseConnectionException, IOException, ParseException {
-        HBaseClient.instance().get(table_geo_device, "s00twy0_20190415_360660B6291170D0F51CBC56EB2DBD06");
-
-        Random rand = new Random();
-
-        Properties props = AppConfig.listProperties("geo-loc.properties");
-        List<Object> citys = new ArrayList<>(props.keySet());
-
-        List<Integer> rss = new ArrayList<>();
-        rss.add(100);
-        rss.add(500);
-        rss.add(1000);
-        rss.add(2000);
-        rss.add(5000);
-
-        for (Integer radius : rss) {
-            String city = citys.get(rand.nextInt(citys.size())).toString();
-            String[] loc = props.getProperty(city).split(",");
-            System.out.println(city + "\t" + loc[0] + "," + loc[1]);
-            System.out.println("radius\t" + radius);
-            long st = System.currentTimeMillis();
-            System.out.println("roughCount\t" + roughCount(Double.valueOf(loc[0]), Double.valueOf(loc[1]), radius, "20190415", "20190417", 0) + "\t" + (System.currentTimeMillis() - st));
-            System.out.println("sampleCount\t" + sampleCount(Double.valueOf(loc[0]), Double.valueOf(loc[1]), radius, "20190415", "20190417") + "\t" + (System.currentTimeMillis() - st));
-            st = System.currentTimeMillis();
-            System.out.println("roughCount\t" + rangeScan(Double.valueOf(loc[0]), Double.valueOf(loc[1]), radius, "20190415", "20190417", 0).size() + "\t" + (System.currentTimeMillis() - st));
-            System.out.println("++++++++++=============+++++++++++");
-        }
-//        System.out.println(trace("020000000000", "20190328", "20190328"));
+        did2statHash("D54D1702AD0F8326224B817C796763C9", null, null, 100);
     }
 }

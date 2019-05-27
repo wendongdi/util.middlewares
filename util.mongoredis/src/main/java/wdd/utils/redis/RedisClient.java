@@ -47,6 +47,34 @@ public class RedisClient {
         jedisCluster = new JedisCluster(nodes, timeout, config);
     }
 
+    public static JedisCluster newRedisClient(Properties properties) {
+        JedisPoolConfig config = new JedisPoolConfig();
+        int maxTotal = Integer.valueOf(properties.getProperty("redis.cluster.max_total", "200"));
+        config.setMaxTotal(maxTotal);
+        int maxIdle = Integer.valueOf(properties.getProperty("redis.cluster.max_idle", "20"));
+        config.setMaxIdle(maxIdle);
+        int maxWait = Integer.valueOf(properties.getProperty("redis.cluster.max_wait", "1000"));
+        config.setMaxWaitMillis(maxWait);
+        config.setTestOnBorrow(false);
+        config.setTestWhileIdle(true);
+        config.setMinEvictableIdleTimeMillis(120000);
+        config.setTimeBetweenEvictionRunsMillis(120000);
+        config.setNumTestsPerEvictionRun(-1);
+        config.setBlockWhenExhausted(false);
+
+        Set<HostAndPort> nodes = new HashSet<HostAndPort>();
+        String[] hnps = properties.getProperty("redis.cluster.nodes").split(",");
+        for (String hnp : hnps) {
+            String[] hps = hnp.split(":");
+            if (hps.length == 2) {
+                nodes.add(new HostAndPort(hps[0], Integer.parseInt(hps[1])));
+            }
+        }
+
+        int timeout = Integer.valueOf(properties.getProperty("redis.cluster.timeout", "1000"));
+        return new JedisCluster(nodes, timeout, config);
+    }
+
     public void add(String key, String data, int Expiry) {
         if (StringUtils.isEmpty(key)) {
             jedisCluster.set(key, data);
@@ -55,8 +83,9 @@ public class RedisClient {
     }
 
     public void get(String key) {
-        if (StringUtils.isEmpty(key))
+        if (StringUtils.isEmpty(key)) {
             jedisCluster.smembers(key);
+        }
     }
 
     public static RedisClient instance() throws IOException {

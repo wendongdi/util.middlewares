@@ -2,8 +2,6 @@ package wdd.utils.httpclient;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
-import wdd.utils.httpclient.exception.ApiTimeOutException;
-import wdd.utils.httpclient.exception.HttpException;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -15,6 +13,7 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.conn.ConnectTimeoutException;
 import org.apache.http.entity.ByteArrayEntity;
+import org.apache.http.entity.FileEntity;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
@@ -24,7 +23,10 @@ import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wdd.utils.commons.StringUtils;
+import wdd.utils.httpclient.exception.ApiTimeOutException;
+import wdd.utils.httpclient.exception.HttpException;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.net.URI;
@@ -58,10 +60,11 @@ public class HttpRequest {
 
     public static HttpRequest instance() {
         HttpRequest instance;
-        while ((instance = existed.get(defalut_MaxThreads + "_" + defalut_MaxTimeout)) == null)
+        while ((instance = existed.get(defalut_MaxThreads + "_" + defalut_MaxTimeout)) == null) {
             synchronized (HttpRequest.class) {
                 new HttpRequest();
             }
+        }
         return instance;
     }
 
@@ -80,25 +83,29 @@ public class HttpRequest {
 
     public static HttpRequest instancePatch() {
         HttpRequest instance;
-        while ((instance = existed.get("2000_30000")) == null)
+        while ((instance = existed.get("2000_30000")) == null) {
             synchronized (HttpRequest.class) {
                 new HttpRequest(2000, 30000);
             }
+        }
         return instance;
     }
 
     public static HttpRequest instance(int MaxThreads, int MaxTimeout) {
         HttpRequest instance;
-        while ((instance = existed.get(MaxThreads + "_" + MaxTimeout)) == null)
+        while ((instance = existed.get(MaxThreads + "_" + MaxTimeout)) == null) {
             synchronized (HttpRequest.class) {
                 new HttpRequest(MaxThreads, MaxTimeout);
             }
+        }
         return instance;
     }
 
     private static URI getUri(String href) {
         try {
-            if (StringUtils.nonEmpty(href)) return new URL(href).toURI();
+            if (StringUtils.nonEmpty(href)) {
+                return new URL(href).toURI();
+            }
         } catch (Exception e) {
             logger.error("HttpRequest - getUri " + e.getLocalizedMessage());
         }
@@ -122,8 +129,9 @@ public class HttpRequest {
      */
     public String post(String url, final Map<String, String> params) throws IOException, ApiTimeOutException, HttpException {
         return post(url, new ArrayList<NameValuePair>() {{
-            for (Map.Entry<String, String> entry : params.entrySet())
+            for (Map.Entry<String, String> entry : params.entrySet()) {
                 add(new BasicNameValuePair(entry.getKey(), entry.getValue()));
+            }
 
         }});
     }
@@ -132,7 +140,9 @@ public class HttpRequest {
         String result = "";
         HttpPost request = postRequest(url);
         try {
-            if (request == null) throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            if (request == null) {
+                throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            }
 
             request.setEntity(new UrlEncodedFormEntity(params, "utf-8"));
 
@@ -154,7 +164,9 @@ public class HttpRequest {
         String result = "";
         HttpPost request = postRequest(url);
         try {
-            if (request == null) throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            if (request == null) {
+                throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            }
 
             request.setHeader("Content-Type", "application/json;charset=utf-8");
             request.setHeader("Accept", "application/json;charset=utf-8");
@@ -171,7 +183,7 @@ public class HttpRequest {
         HttpResponse response = execute(request);
         if (response != null) {
             HttpEntity entity = response.getEntity();
-            if (response.getStatusLine() != null)
+            if (response.getStatusLine() != null) {
                 if (response.getStatusLine().getStatusCode() == 200 && entity != null) {
                     result = EntityUtils.toString(entity, encode);
                     EntityUtils.consume(entity);
@@ -180,6 +192,7 @@ public class HttpRequest {
                     EntityUtils.consume(entity);
                     throw new HttpException(response.getStatusLine());
                 }
+            }
         }
         return result;
     }
@@ -200,12 +213,13 @@ public class HttpRequest {
         HttpResponse response = execute(request);
         if (response != null) {
             HttpEntity entity = response.getEntity();
-            if (response.getStatusLine() != null)
+            if (response.getStatusLine() != null) {
                 if (response.getStatusLine().getStatusCode() == 200 && entity != null) {
                     result = EntityUtils.toByteArray(entity);
                 } else {
                     logger.error(request.getURI() + " " + response.getStatusLine().getStatusCode());
                 }
+            }
             EntityUtils.consume(entity);
         }
         return result;
@@ -227,7 +241,9 @@ public class HttpRequest {
         HttpPost request = postRequest(url);
 
         try {
-            if (request == null) throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            if (request == null) {
+                throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            }
 
             request.setHeader("Content-Type", "application/json;charset=utf-8");
             request.setHeader("Accept", "application/json;charset=utf-8");
@@ -245,13 +261,16 @@ public class HttpRequest {
         String result = "";
         HttpPost request = postRequest(url);
         try {
-            if (request == null) throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            if (request == null) {
+                throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            }
             request.setHeader("Content-Type", "application/x-www-form-urlencoded");
             request.setHeader("Accept", "application/json;charset=utf-8");
             StringBuilder data = new StringBuilder();
             for (Map.Entry<String, String> entry : json.entrySet()) {
-                if (!data.toString().equals(""))
+                if (!data.toString().equals("")) {
                     data.append("&");
+                }
                 data.append(entry.getKey()).append('=').append(entry.getValue());
             }
             request.setEntity(new StringEntity(data.toString(), "utf-8"));
@@ -273,7 +292,9 @@ public class HttpRequest {
         byte[] result = null;
         try {
             HttpPost request = postRequest(url);
-            if (request == null) throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            if (request == null) {
+                throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            }
 
             request.setHeader("Content-Type", "application/x-protobuf");
             request.setEntity(new ByteArrayEntity(data));
@@ -290,7 +311,9 @@ public class HttpRequest {
         byte[] result = null;
         try {
             HttpPost request = postRequest(url);
-            if (request == null) throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            if (request == null) {
+                throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            }
 
             request.setHeader("token", token);
             request.setHeader("Content-Type", "application/x-protobuf");
@@ -310,7 +333,9 @@ public class HttpRequest {
         String result = "";
         HttpGet request = getRequest(url, headers);
         try {
-            if (request == null) throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            if (request == null) {
+                throw new Exception("invalid request URI (" + (url == null ? "NULL" : url) + ")");
+            }
 
         } catch (Exception e) {
             e.printStackTrace();

@@ -5,7 +5,7 @@ import java.io.IOException;
 public class MongoUtil {
     private static MongoClient client;
 
-    public static MongoClient instance() throws IOException {
+    public static MongoClient instance() throws Exception {
         if (client == null) {
             synchronized (MongoUtil.class) {
                 if (null == client) {

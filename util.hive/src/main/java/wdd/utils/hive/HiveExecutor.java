@@ -1,4 +1,4 @@
-package wdd.utils.mysql;
+package wdd.utils.hive;
 
 import wdd.utils.commons.AppConfig;
 import wdd.utils.commons.BeansUtil;
@@ -11,17 +11,24 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 
-public class MysqlExecutor {
+public class HiveExecutor {
     private Connection connection;
 
-    public MysqlExecutor() throws ClassNotFoundException, SQLException, IOException {
-        if (AppConfig.instance().getProperty("jdbc.driverClassName") == null) {
-            AppConfig.instance().addProperties("mysql-config.properties");
-        }
-        Class.forName(AppConfig.instance().getProperty("jdbc.driverClassName"));
-        this.connection = DriverManager.getConnection(AppConfig.instance().getProperty("jdbc.console.url"), AppConfig.instance().getProperty("jdbc.common.username"), AppConfig.instance().getProperty("jdbc.common.password"));
+    public Properties getProperties() {
+        return properties;
     }
 
+    public void setProperties(Properties properties) {
+        this.properties = properties;
+    }
+
+    private Properties properties;
+
+    public HiveExecutor() throws ClassNotFoundException, SQLException, IOException {
+        properties = AppConfig.listProperties("hive-config.properties");
+        Class.forName(properties.getProperty("jdbc.driverClassName"));
+        this.connection = DriverManager.getConnection(properties.getProperty("jdbc.console.url"), properties.getProperty("jdbc.common.username"), properties.getProperty("jdbc.common.password"));
+    }
 
     public <T> List<T> query(String sql, Class<? extends T> clazz) throws SQLException, IllegalAccessException, InstantiationException, InvocationTargetException {
         ResultSet rs = connection.createStatement().executeQuery(sql);
@@ -36,11 +43,13 @@ public class MysqlExecutor {
                     o = rs.getObject(field);
                 } catch (Exception ignored) {
                 }
-                if (o != null)
-                    if (f_class.equals(Date.class))
+                if (o != null) {
+                    if (f_class.equals(Date.class)) {
                         BeansUtil.copy2Field(t, field, rs.getTimestamp(field));
-                    else
+                    } else {
                         BeansUtil.copy2Field(t, field, rs.getObject(field));
+                    }
+                }
 
             }
             ress.add(t);

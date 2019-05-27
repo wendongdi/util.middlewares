@@ -51,14 +51,16 @@ public class HBaseClient implements Serializable {
     }
 
     public HBaseClient() throws HBaseConnectionException {
-        if (connection == null)
+        if (connection == null) {
             connection = HBaseConnectioner.getConnection();
-        if (admin == null)
+        }
+        if (admin == null) {
             try {
                 admin = connection.getAdmin();
             } catch (IOException e) {
                 throw new HBaseConnectionException(e);
             }
+        }
         if (tablePool == null) {
             tablePool = new TablePool();
         }
@@ -83,8 +85,9 @@ public class HBaseClient implements Serializable {
     }
 
     public static void printResult(Result r) {
-        if (r.isEmpty())
+        if (r.isEmpty()) {
             return;
+        }
         for (Cell cell : r.listCells()) {
             System.out.println(Bytes.toString(CellUtil.cloneRow(cell)) + "/" + Bytes.toString(CellUtil.cloneFamily(cell)) + "/" + Bytes.toString(CellUtil.cloneQualifier(cell)) + "/" + Bytes.toString(CellUtil.cloneValue(cell)));
         }
@@ -143,10 +146,12 @@ public class HBaseClient implements Serializable {
         //set start & stop rows
         String startRow = tblann.startRow();
         String endRow = tblann.stopRow();
-        if (StringUtils.nonEmpty(startRow))
+        if (StringUtils.nonEmpty(startRow)) {
             scan.setStartRow(startRow.getBytes());
-        if (StringUtils.nonEmpty(endRow))
+        }
+        if (StringUtils.nonEmpty(endRow)) {
             scan.setStopRow(endRow.getBytes());
+        }
         /*
         update filters
         */
@@ -157,8 +162,9 @@ public class HBaseClient implements Serializable {
         try {
             for (Result result : scan(tableName, scan).next(nextRows)) {
                 T t = rowMapping(result, clazz);
-                if (t != null)
+                if (t != null) {
                     to.add(t);
+                }
             }
         } catch (IOException e) {
             throw new HBaseRunTimeException(e);
@@ -188,8 +194,9 @@ public class HBaseClient implements Serializable {
         try {
             for (Row data : datas) {
                 String rowkey = BeanUtils.getProperty(data, "row");
-                if (rowkey == null)
+                if (rowkey == null) {
                     continue;
+                }
                 List<Column> temp = new ArrayList<>();
                 for (Column field : fields) {
                     String value = BeanUtils.getProperty(data, field.getValue());
@@ -200,8 +207,9 @@ public class HBaseClient implements Serializable {
                 adddatas.put(rowkey, temp);
             }
 
-            if (adddatas.size() == 0)
+            if (adddatas.size() == 0) {
                 return;
+            }
 
             Table table = tablePool.getTable(tableName);
             for (String key : adddatas.keySet()) {
@@ -210,15 +218,17 @@ public class HBaseClient implements Serializable {
                 Delete del = new Delete(Bytes.toBytes(key));
                 boolean delflag = false;
                 for (Column cid : cids) {
-                    if (StringUtils.nonEmpty(cid.getValue()))
+                    if (StringUtils.nonEmpty(cid.getValue())) {
                         p1.addColumn(Bytes.toBytes(cid.getFamily()), Bytes.toBytes(cid.getQualifier()), Bytes.toBytes(cid.getValue()));
-                    else {
+                    } else {
                         del.addColumn(Bytes.toBytes(cid.getFamily()), Bytes.toBytes(cid.getQualifier()));
                         delflag = true;
                     }
                 }
                 table.put(p1);
-                if (delflag) table.delete(del);
+                if (delflag) {
+                    table.delete(del);
+                }
             }
         } catch (Exception e) {
             throw new HBaseRunTimeException(e);
@@ -352,8 +362,9 @@ public class HBaseClient implements Serializable {
         for (Field field : clazz.getDeclaredFields()) {
             HBaseColumn hColumn = field.getAnnotation(HBaseColumn.class);
             if (hColumn != null) {
-                if (StringUtils.nonEmpty(hColumn.family()) && StringUtils.nonEmpty(hColumn.qualifier()))
+                if (StringUtils.nonEmpty(hColumn.family()) && StringUtils.nonEmpty(hColumn.qualifier())) {
                     columns.add(new Column(hColumn.family(), hColumn.qualifier(), field.getName()));
+                }
             }
         }
         return columns;
@@ -382,8 +393,9 @@ public class HBaseClient implements Serializable {
             if (addflag) {
                 BeanUtils.copyProperty(t, "row", Bytes.toString(result.getRow()));
                 return t;
-            } else
+            } else {
                 return null;
+            }
         } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
             throw new HBaseRunTimeException(e);
         }

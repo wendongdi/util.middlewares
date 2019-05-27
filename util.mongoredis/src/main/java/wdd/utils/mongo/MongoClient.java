@@ -2,10 +2,13 @@ package wdd.utils.mongo;
 
 import com.mongodb.*;
 import org.apache.commons.beanutils.BeanUtils;
+import redis.clients.jedis.JedisCluster;
+import wdd.utils.commons.AppConfig;
 import wdd.utils.commons.BeansUtil;
 import wdd.utils.commons.StringUtils;
 import wdd.utils.mongo.annotation.Document;
 import wdd.utils.mongo.entity.BaseEntity;
+import wdd.utils.redis.RedisClient;
 
 import java.io.IOException;
 import java.lang.reflect.Array;
@@ -16,13 +19,26 @@ import java.util.*;
 
 public class MongoClient {
     private com.mongodb.MongoClient client;
+    private static JedisCluster redisClient = null;
 
-    public MongoClient(com.mongodb.MongoClient client) {
+    public MongoClient(com.mongodb.MongoClient client) throws IOException {
         this.client = client;
+        //配置内置的缓存
+        synchronized (MongoClient.class) {
+            if (redisClient == null) {
+                redisClient = RedisClient.newRedisClient(AppConfig.listProperties("mongoredis.properties"));
+            }
+        }
     }
 
-    public MongoClient() throws IOException {
+    public MongoClient() throws Exception {
         this.client = MongoAccessor.createClient();
+        //配置内置的缓存
+        synchronized (MongoClient.class) {
+            if (redisClient == null) {
+                redisClient = RedisClient.newRedisClient(AppConfig.listProperties("mongoredis.properties"));
+            }
+        }
     }
 
     public <T extends BaseEntity> List<T> queryAll(Class<T> entityClass) throws Exception {
@@ -66,9 +82,6 @@ public class MongoClient {
                 Map.Entry kv = (Map.Entry) obj;
                 String key = kv.getKey().toString();
                 Object value = kv.getValue();
-                if ("_id".equals(key)) {
-                    key = "id";
-                }
                 if (value instanceof BasicDBObject) {
                     BasicDBObject fieldVal = (BasicDBObject) value;
                     Field field = res.getClass().getField(key);
@@ -96,9 +109,9 @@ public class MongoClient {
                         }
                         Collection collection;
 
-                        if (feildType.equals(java.util.List.class)) {
+                        if (feildType.equals(List.class)) {
                             collection = new ArrayList();
-                        } else if (feildType.equals(java.util.Set.class)) {
+                        } else if (feildType.equals(Set.class)) {
                             collection = new HashSet();
                         } else {
                             collection = (Collection) feildType.newInstance();
@@ -140,6 +153,15 @@ public class MongoClient {
         return toBaseEntity(collection(entityClass).find(new BasicDBObject(query)), entityClass);
     }
 
+    private <T extends BaseEntity> List<T> queryCache(Map<String, Object> query, Class<T> entityClass) throws Exception {
+        Document doc = entityClass.getAnnotation(Document.class);
+        if (doc != null && doc.isCache()) {
+            return query(query, entityClass);
+        } else {
+            return new ArrayList<>();
+        }
+    }
+
     public List<BasicDBObject> query(Map<String, Object> query, String entityClass) throws Exception {
         String[] doc = entityClass.split("\\.");
         assert doc.length > 1;
@@ -148,40 +170,67 @@ public class MongoClient {
 
     public <T extends BaseEntity> void save(T entity) throws Exception {
         assert entity.getClass().isAssignableFrom(BaseEntity.class);
-        if (StringUtils.isEmpty(entity.getId())) {
-            entity.setId(EncryptUtil.newId());
+        if (StringUtils.isEmpty(entity.get_id())) {
+            entity.set_id(EncryptUtil.newId());
         }
         Map entityMap = BeansUtil.obj2Map(entity);
-        entityMap.put("_id", entityMap.get("id"));
-        entityMap.remove("id");
         BasicDBObject update = new BasicDBObject(entityMap).append("createTime", new Date()).append("updateTime", new Date());
         collection(entity.getClass()).insert(update);
     }
 
-    public <T extends BaseEntity> void remove(Map<String, Object> query, Class<T> entityClass) throws IOException {
+    public <T extends BaseEntity> void remove(Map<String, Object> query, Class<T> entityClass) throws Exception {
         assert entityClass.isAssignableFrom(BaseEntity.class);
+        List<T> entities = queryCache(query, entityClass);
         collection(entityClass).remove(new BasicDBObject(query));
+        for (T t : entities) {
+            cacheClear(t);
+        }
     }
 
-    public <T extends BaseEntity> void set(Map<String, Object> query, Map<String, Object> update, Class<T> entityClass) throws IOException {
+    public <T extends BaseEntity> void set(Map<String, Object> query, Map<String, Object> update, Class<T> entityClass) throws Exception {
         assert entityClass.isAssignableFrom(BaseEntity.class);
+        List<T> entities = queryCache(query, entityClass);
         collection(entityClass).update(new BasicDBObject(query), new BasicDBObject("$set", update), false, true);
+        for (T t : entities) {
+            cacheClear(t);
+        }
     }
 
-    public <T extends BaseEntity> void update(Map<String, Object> query, Map<String, Object> update, Class<T> entityClass) throws IOException {
+    public <T extends BaseEntity> void update(Map<String, Object> query, Map<String, Object> update, Class<T> entityClass) throws Exception {
         assert entityClass.isAssignableFrom(BaseEntity.class);
+        List<T> entities = queryCache(query, entityClass);
         collection(entityClass).update(new BasicDBObject(query), new BasicDBObject("$set", update).append("$currentDate", new BasicDBObject("updateTime", true)), false, true);
+        for (T t : entities) {
+            cacheClear(t);
+        }
     }
 
-    public <T extends BaseEntity> void updateNotSet(Map<String, Object> query, Map<String, Object> update, Class<T> entityClass) throws IOException {
+    public <T extends BaseEntity> void updateNotSet(Map<String, Object> query, Map<String, Object> update, Class<T> entityClass) throws Exception {
         assert entityClass.isAssignableFrom(BaseEntity.class);
+        List<T> entities = queryCache(query, entityClass);
         collection(entityClass).update(new BasicDBObject(query), new BasicDBObject(update), false, true);
+        for (T t : entities) {
+            cacheClear(t);
+        }
     }
 
-    public <T extends BaseEntity> void replace(Map<String, Object> query, Map<String, Object> update, Class<T> entityClass) throws IOException {
+    public <T extends BaseEntity> void replace(Map<String, Object> query, Map<String, Object> update, Class<T> entityClass) throws Exception {
         assert entityClass.isAssignableFrom(BaseEntity.class);
+        List<T> entities = queryCache(query, entityClass);
         collection(entityClass).update(new BasicDBObject(query), new BasicDBObject("$set", update).append("$currentDate", new BasicDBObject("createTime", true).append("updateTime", true)), true, true);
+        for (T t : entities) {
+            cacheClear(t);
+        }
     }
+
+    public void cacheClear(BaseEntity entity) {
+        redisClient.del(entity.get_class() + entity.get_id());
+    }
+
+    public String cacheString(BaseEntity entity) {
+        return redisClient.get(entity.get_class() + entity.get_id());
+    }
+
 
     public void close() {
         if (client != null) {
