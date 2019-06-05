@@ -26,7 +26,14 @@ public class HBaseClient implements Serializable {
     private Connection connection;
     private Admin admin;
 
-    public TablePool getTablePool() {
+    public TablePool getTablePool() throws HBaseConnectionException {
+        if (tablePool == null) {
+            synchronized (HBaseClient.class) {
+                if (tablePool == null) {
+                    tablePool = new TablePool(getConnection());
+                }
+            }
+        }
         return tablePool;
     }
 
@@ -34,7 +41,14 @@ public class HBaseClient implements Serializable {
         this.tablePool = tablePool;
     }
 
-    public Connection getConnection() {
+    public Connection getConnection() throws HBaseConnectionException {
+        if (connection == null) {
+            synchronized (HBaseClient.class) {
+                if (connection == null) {
+                    connection = HBaseConnectioner.getConnection();
+                }
+            }
+        }
         return connection;
     }
 
@@ -42,7 +56,18 @@ public class HBaseClient implements Serializable {
         this.connection = connection;
     }
 
-    public Admin getAdmin() {
+    public Admin getAdmin() throws HBaseConnectionException {
+        if (admin == null) {
+            synchronized (HBaseClient.class) {
+                if (admin == null) {
+                    try {
+                        admin = getConnection().getAdmin();
+                    } catch (IOException e) {
+                        throw new HBaseConnectionException(e);
+                    }
+                }
+            }
+        }
         return admin;
     }
 
@@ -51,19 +76,9 @@ public class HBaseClient implements Serializable {
     }
 
     public HBaseClient() throws HBaseConnectionException {
-        if (connection == null) {
-            connection = HBaseConnectioner.getConnection();
-        }
-        if (admin == null) {
-            try {
-                admin = connection.getAdmin();
-            } catch (IOException e) {
-                throw new HBaseConnectionException(e);
-            }
-        }
-        if (tablePool == null) {
-            tablePool = new TablePool();
-        }
+        getConnection();
+        getAdmin();
+        getTablePool();
     }
 
     public static HBaseClient instance() throws HBaseConnectionException {
@@ -115,8 +130,8 @@ public class HBaseClient implements Serializable {
         return tblann;
     }
 
-    public Table getTable(TableName tableName) throws IOException {
-        return tablePool.getTable(tableName);
+    public Table getTable(TableName tableName) throws IOException, HBaseConnectionException {
+        return getTablePool().getTable(tableName);
     }
 
     public FilterList filters(HBaseTable tblann) {
@@ -174,9 +189,9 @@ public class HBaseClient implements Serializable {
 
     public ResultScanner scan(String tableName, Scan scan) throws HBaseRunTimeException {
         try {
-            Table table = tablePool.getTable(tableName);
+            Table table = getTablePool().getTable(tableName);
             return table.getScanner(scan);
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new HBaseRunTimeException(e);
         }
     }
@@ -211,7 +226,7 @@ public class HBaseClient implements Serializable {
                 return;
             }
 
-            Table table = tablePool.getTable(tableName);
+            Table table = getTablePool().getTable(tableName);
             for (String key : adddatas.keySet()) {
                 List<Column> cids = adddatas.get(key);
                 Put p1 = new Put(Bytes.toBytes(key));
@@ -235,22 +250,22 @@ public class HBaseClient implements Serializable {
         }
     }
 
-    public void put(String tableName, Put put) throws IOException {
-        Table table = tablePool.getTable(tableName);
+    public void put(String tableName, Put put) throws IOException, HBaseConnectionException {
+        Table table = getTablePool().getTable(tableName);
         table.put(put);
     }
 
-    public void addColumn(String tableName, String row, String family, String qualifiar, String value) throws IOException {
+    public void addColumn(String tableName, String row, String family, String qualifiar, String value) throws IOException, HBaseConnectionException {
         addColumn(tableName, row.getBytes(), family.getBytes(), qualifiar.getBytes(), value.getBytes());
     }
 
-    public void addColumn(String tableName, byte[] row, byte[] family, byte[] qualifiar, byte[] value) throws IOException {
+    public void addColumn(String tableName, byte[] row, byte[] family, byte[] qualifiar, byte[] value) throws IOException, HBaseConnectionException {
         Put put = new Put(row);
         put.addColumn(family, qualifiar, value);
         put(tableName, put);
     }
 
-    public void putRow(String tableName, String row, List<String[]> datas) throws IOException {
+    public void putRow(String tableName, String row, List<String[]> datas) throws IOException, HBaseConnectionException {
         Put put = new Put(row.getBytes());
         for (String[] data : datas) {
             put.addColumn(data[0].getBytes(), data[1].getBytes(), data[2].getBytes());
@@ -258,20 +273,20 @@ public class HBaseClient implements Serializable {
         put(tableName, put);
     }
 
-    public void put(TableName tableName, Put put) throws IOException {
-        Table table = tablePool.getTable(tableName);
+    public void put(TableName tableName, Put put) throws IOException, HBaseConnectionException {
+        Table table = getTablePool().getTable(tableName);
         table.put(put);
     }
 
-    public void putSync(TableName tableName, List<Put> puts) throws IOException {
-        Table table = tablePool.getTable(tableName);
+    public void putSync(TableName tableName, List<Put> puts) throws IOException, HBaseConnectionException {
+        Table table = getTablePool().getTable(tableName);
         table.put(puts);
     }
 
-    public void putAsync(String tableName, List<Put> puts) throws IOException {
+    public void putAsync(String tableName, List<Put> puts) throws IOException, HBaseConnectionException {
         BufferedMutatorParams params = new BufferedMutatorParams(TableName.valueOf(tableName));
         params.writeBufferSize(AppConfig.instance().getLongProperty("hbase.mutator.buffersize", 6 * 1024 * 1024));
-        BufferedMutator mutator = connection.getBufferedMutator(params);
+        BufferedMutator mutator = getConnection().getBufferedMutator(params);
         mutator.mutate(puts);
         mutator.flush();
         mutator.close();
@@ -300,9 +315,9 @@ public class HBaseClient implements Serializable {
     public Result get(TableName tableName, byte[] rowKey) throws HBaseRunTimeException {
         try {
             Get get = new Get(rowKey);
-            Table table = tablePool.getTable(tableName);
+            Table table = getTablePool().getTable(tableName);
             return table.get(get);
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new HBaseRunTimeException(e);
         }
     }
@@ -319,21 +334,21 @@ public class HBaseClient implements Serializable {
 
     public void deleteColumn(String tableName, String rowKey, String family, String qualifiar) throws HBaseRunTimeException {
         try {
-            Table table = tablePool.getTable(tableName);
+            Table table = getTablePool().getTable(tableName);
             Delete delete = new Delete(rowKey.getBytes());
             delete.addColumn(family.getBytes(), qualifiar.getBytes());
             table.delete(delete);
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new HBaseRunTimeException(e);
         }
     }
 
     public void delete(String tableName, byte[] rowKey) throws HBaseRunTimeException {
         try {
-            Table table = tablePool.getTable(tableName);
+            Table table = getTablePool().getTable(tableName);
             Delete delete = new Delete(rowKey);
             table.delete(delete);
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new HBaseRunTimeException(e);
         }
     }
@@ -341,18 +356,18 @@ public class HBaseClient implements Serializable {
 
     public void delete(TableName tableName, List<Delete> dels) throws HBaseRunTimeException {
         try {
-            Table table = tablePool.getTable(tableName);
+            Table table = getTablePool().getTable(tableName);
             table.delete(dels);
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new HBaseRunTimeException(e);
         }
     }
 
     public void delete(String tableName, List<Delete> dels) throws HBaseRunTimeException {
         try {
-            Table table = tablePool.getTable(tableName);
+            Table table = getTablePool().getTable(tableName);
             table.delete(dels);
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new HBaseRunTimeException(e);
         }
     }
@@ -404,9 +419,9 @@ public class HBaseClient implements Serializable {
     public ResultScanner scanAll(String tableName) throws HBaseRunTimeException {
         try {
             Scan scan = new Scan();
-            Table table = tablePool.getTable(tableName);
+            Table table = getTablePool().getTable(tableName);
             return table.getScanner(scan);
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new HBaseRunTimeException(e);
         }
     }
@@ -415,7 +430,7 @@ public class HBaseClient implements Serializable {
         String familyDefault = AppConfig.instance().getProperty("family.default", "info");
         // 表存在
         try {
-            if (admin.tableExists(tableName)) {
+            if (getAdmin().tableExists(tableName)) {
                 return false;
             }
             // 创建新表
@@ -428,9 +443,9 @@ public class HBaseClient implements Serializable {
             h_table.addFamily(h_clomun);
             // 开始创建表
             if (start == null) {
-                admin.createTable(h_table, null);
+                getAdmin().createTable(h_table, null);
             } else {
-                admin.createTable(h_table, start, end, regionNum);
+                getAdmin().createTable(h_table, start, end, regionNum);
             }
         } catch (Exception e) {
             throw new HBaseRunTimeException(e);
@@ -442,7 +457,7 @@ public class HBaseClient implements Serializable {
         String familyDefault = AppConfig.instance().getProperty("family.default", "info");
         // 表存在
         try {
-            if (admin.tableExists(tableName)) {
+            if (getAdmin().tableExists(tableName)) {
                 return false;
             }
             // 创建新表
@@ -454,7 +469,7 @@ public class HBaseClient implements Serializable {
             h_clomun.setMaxVersions(2);
             h_table.addFamily(h_clomun);
             // 开始创建表
-            admin.createTable(h_table, splitBytes);
+            getAdmin().createTable(h_table, splitBytes);
         } catch (Exception e) {
             throw new HBaseRunTimeException(e);
         }

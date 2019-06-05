@@ -5,7 +5,6 @@ import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Table;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import wdd.utils.hbase.exception.HBaseConnectionException;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -19,12 +18,11 @@ class TableBean {
 
 public class TablePool {
     private static Logger log = LoggerFactory.getLogger(TablePool.class);
-    private List<TableBean> pool;
+    private List<TableBean> pool = new ArrayList<>();
     private Connection connection;
 
-    public TablePool() throws HBaseConnectionException {
-        pool = new ArrayList<>();
-        this.connection = HBaseConnectioner.getConnection();
+    public TablePool(Connection connection) {
+        this.connection = connection;
     }
 
     public synchronized Table getTable(String tableName) throws IOException {
@@ -64,8 +62,9 @@ public class TablePool {
                 log.error("table close", e);
             }
         }
-        if (!connection.isClosed())
+        if (connection != null && !connection.isClosed()) {
             connection.close();
-        connection = null;
+            connection = null;
+        }
     }
 }
